@@ -1,0 +1,17 @@
+{
+  "name": "conference-poll-functions",
+  "version": "1.0.0",
+  "description": "Cloud Functions for Conference Poll",
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "qrcode": "^1.5.4",
+    "uuid": "^10.0.0",
+    "cookie-parser": "^1.4.7",
+    "firebase-functions": "^6.3.0",
+    "firebase-admin": "^13.0.0"
+  }
+}

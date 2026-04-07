@@ -136,6 +136,7 @@
         hide(document.getElementById('login-screen'));
         show(document.getElementById('dashboard-screen'));
         loadResults();
+        startAutoRefresh();
       } catch (err) {
         const errEl = document.getElementById('login-error');
         errEl.textContent = err.message;
@@ -151,6 +152,7 @@
           hide(document.getElementById('login-screen'));
           show(document.getElementById('dashboard-screen'));
           loadResults();
+          startAutoRefresh();
         } catch {
           sessionStorage.removeItem('adminToken');
           adminToken = '';
@@ -198,11 +200,27 @@
     // --- Refresh ---
     document.getElementById('btn-refresh').addEventListener('click', loadResults);
 
+    // Auto-refresh every 3 seconds
+    let autoRefreshInterval = null;
+    function startAutoRefresh() {
+      if (!autoRefreshInterval) {
+        autoRefreshInterval = setInterval(loadResults, 3000);
+      }
+    }
+    function stopAutoRefresh() {
+      if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+      }
+    }
+    // auto-refresh is started after successful login or auto-login
+
     // --- Logout ---
     document.getElementById('btn-logout').addEventListener('click', async () => {
       try { await api('/api/admin/logout', { method: 'POST' }); } catch {}
       sessionStorage.removeItem('adminToken');
       adminToken = '';
+      stopAutoRefresh();
       show(document.getElementById('login-screen'));
       hide(document.getElementById('dashboard-screen'));
     });
