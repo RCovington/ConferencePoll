@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conference Talk Poll — April 2026</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="poll-container">
+    <header class="poll-header">
+      <h1>April 2026 General Conference Talk Poll</h1>
+      <p id="instructions" class="instructions"></p>
+    </header>
+
+    <!-- Sort controls -->
+    <div id="sort-bar" class="sort-bar">
+      <label>Sort by:</label>
+      <button class="btn btn-sort active" data-sort="session">Session Order</button>
+      <button class="btn btn-sort" data-sort="title">Talk Title</button>
+      <button class="btn btn-sort" data-sort="first">Speaker First Name</button>
+      <button class="btn btn-sort" data-sort="last">Speaker Last Name</button>
+    </div>
+
+    <!-- Talk list -->
+    <div id="talk-list" class="talk-list"></div>
+
+    <!-- Submit bar -->
+    <div id="submit-bar" class="submit-bar">
+      <span id="selection-count">0 selected</span>
+      <button id="btn-submit" class="btn btn-primary" disabled>Submit Votes</button>
+    </div>
+
+    <!-- Thank you screen -->
+    <div id="thank-you" class="thank-you hidden">
+      <h2>Thank you for voting!</h2>
+      <p>Your selections have been recorded.</p>
+      <div id="your-picks" class="your-picks"></div>
+    </div>
+  </div>
+
+  <script>
+    let talks = [];
+    let maxVotes = 3;
+    let pollGeneration = 0;
+    let selected = new Set();
+    let hasVoted = false;
+
+    // --- Parse speaker names ---
+    function parseSpeaker(speaker) {
+      // Remove title prefix (President, Elder, Sister, Brother)
+      const stripped = speaker.replace(/^(President|Elder|Sister|Brother)\s+/i, '');
+      const parts = stripped.split(/\s+/);
+      const firstName = parts[0] || '';
+      const lastName = parts[parts.length - 1] || '';
+      return { firstName, lastName, fullName: stripped };
+    }
+
+    // --- Sort functions ---
+    const sorters = {
+      session: (a, b) => (a.sessionOrder - b.sessionOrder) || (a.order - b.order),
+      title: (a, b) => a.title.localeCompare(b.title),
+      first: (a, b) => {
+        const pa = parseSpeaker(a.speaker);
+        const pb = parseSpeaker(b.speaker);
+        return pa.firstName.localeCompare(pb.firstName) || pa.lastName.localeCompare(pb.lastName);
+      },
+      last: (a, b) => {
+        const pa = parseSpeaker(a.speaker);
+        const pb = parseSpeaker(b.speaker);
+        return pa.lastName.localeCompare(pb.lastName) || pa.firstName.localeCompare(pb.firstName);
+      }
+    };
+
+    let currentSort = 'session';
+
+    // --- Render ---
+    function renderTalks() {
+      const sorted = [...talks].sort(sorters[currentSort]);
+      const container = document.getElementById('talk-list');
+      container.innerHTML = '';
+
+      let lastSession = '';
+      sorted.forEach(talk => {
+        // Session divider for session-order sort
+        if (currentSort === 'session' && talk.session !== lastSession) {
+          lastSession = talk.session;
+          const divider = document.createElement('div');
+          divider.className = 'session-divider';
+          divider.textContent = talk.session + ' Session';
+          container.appendChild(divider);
+        }
+
+        const card = document.createElement('label');
+        card.className = 'talk-card' + (selected.has(talk.id) ? ' selected' : '');
+        if (hasVoted) card.classList.add('disabled');
+
+        card.innerHTML = `
+          <input type="checkbox" value="${talk.id}"
+                 ${selected.has(talk.id) ? 'checked' : ''}
+                 ${hasVoted ? 'disabled' : ''}>
+          <div class="talk-info">
+            <div class="talk-title"><a href="${esc(talk.summaryUrl)}" target="_blank" onclick="event.stopPropagation()">${esc(talk.title)}</a></div>
+            <div class="talk-speaker">${esc(talk.speaker)}</div>
+            <div class="talk-session">${esc(talk.session)}</div>
+          </div>
+        `;
+
+        const cb = card.querySelector('input');
+        cb.addEventListener('change', () => {
+          if (hasVoted) return;
+          if (cb.checked) {
+            if (selected.size >= maxVotes) {
+              cb.checked = false;
+              shakeSubmitBar();
+              return;
+            }
+            selected.add(talk.id);
+          } else {
+            selected.delete(talk.id);
+          }
+          updateSelectionUI();
+          renderTalks();
+        });
+
+        container.appendChild(card);
+      });
+    }
+
+    function updateSelectionUI() {
+      const count = selected.size;
+      document.getElementById('selection-count').textContent =
+        `${count} of ${maxVotes} selected`;
+      document.getElementById('btn-submit').disabled = count === 0 || hasVoted;
+    }
+
+    function shakeSubmitBar() {
+      const bar = document.getElementById('submit-bar');
+      bar.classList.add('shake');
+      setTimeout(() => bar.classList.remove('shake'), 500);
+    }
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    // --- Sort buttons ---
+    document.querySelectorAll('.btn-sort').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.btn-sort').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentSort = btn.dataset.sort;
+        renderTalks();
+      });
+    });
+
+    // --- Submit ---
+    document.getElementById('btn-submit').addEventListener('click', async () => {
+      if (selected.size === 0 || hasVoted) return;
+      try {
+        const res = await fetch('/api/vote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ talkIds: [...selected] })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.error || 'Vote failed.');
+          return;
+        }
+        hasVoted = true;
+        showThankYou();
+      } catch (err) {
+        alert('Network error. Please try again.');
+      }
+    });
+
+    function showThankYou() {
+      document.getElementById('submit-bar').classList.add('hidden');
+      document.getElementById('sort-bar').classList.add('hidden');
+      document.getElementById('talk-list').classList.add('hidden');
+      const ty = document.getElementById('thank-you');
+      ty.classList.remove('hidden');
+
+      const picks = document.getElementById('your-picks');
+      picks.innerHTML = '<h3>Your picks:</h3>';
+      const ul = document.createElement('ul');
+      talks.filter(t => selected.has(t.id)).forEach(t => {
+        const li = document.createElement('li');
+        li.innerHTML = `<strong>${esc(t.speaker)}</strong> — <a href="${esc(t.summaryUrl)}" target="_blank">${esc(t.title)}</a>`;
+        ul.appendChild(li);
+      });
+      picks.appendChild(ul);
+
+      renderTalks();
+    }
+
+    // --- Init ---
+    (async () => {
+      try {
+        // Load talks
+        const talkData = await (await fetch('/api/talks')).json();
+        talks = talkData.talks;
+        maxVotes = talkData.maxVotes;
+        pollGeneration = talkData.pollGeneration;
+
+        document.getElementById('instructions').textContent =
+          `Choose up to ${maxVotes} of your favorite talks, then submit your vote.`;
+
+        // Check voter status
+        const status = await (await fetch('/api/voter/status')).json();
+        if (status.hasVoted) {
+          hasVoted = true;
+          status.selections.forEach(id => selected.add(id));
+          showThankYou();
+        }
+
+        renderTalks();
+        updateSelectionUI();
+      } catch (err) {
+        document.getElementById('talk-list').innerHTML =
+          '<p class="error">Failed to load talks. Please refresh.</p>';
+      }
+    })();
+  </script>
+</body>
+</html>

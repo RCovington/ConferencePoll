@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conference Poll — Manager</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Login screen -->
+  <div id="login-screen" class="screen">
+    <div class="login-box">
+      <h1>Conference Poll Manager</h1>
+      <p>Enter the admin password to continue.</p>
+      <form id="login-form">
+        <input type="password" id="password-input" placeholder="Password" autocomplete="current-password" required>
+        <button type="submit" class="btn btn-primary">Login</button>
+      </form>
+      <p id="login-error" class="error hidden"></p>
+    </div>
+  </div>
+
+  <!-- Admin Dashboard -->
+  <div id="dashboard-screen" class="screen hidden">
+    <header class="admin-header">
+      <h1>Conference Poll — Dashboard</h1>
+      <div class="header-actions">
+        <button id="btn-refresh" class="btn btn-small" title="Refresh results">&#x21bb; Refresh</button>
+        <button id="btn-qr" class="btn btn-small">QR Code</button>
+        <button id="btn-print" class="btn btn-small">Print</button>
+        <button id="btn-save" class="btn btn-small">Save CSV</button>
+        <button id="btn-reset" class="btn btn-small btn-danger">Reset Poll</button>
+        <button id="btn-change-pw" class="btn btn-small btn-secondary">Change Password</button>
+        <button id="btn-logout" class="btn btn-small btn-secondary">Logout</button>
+      </div>
+    </header>
+
+    <div class="stats-bar">
+      <span>Total voters: <strong id="stat-voters">0</strong></span>
+      <span>Max votes per person: <strong id="stat-max">3</strong></span>
+      <span>Poll generation: <strong id="stat-gen">1</strong></span>
+    </div>
+
+    <table id="results-table" class="results-table">
+      <thead>
+        <tr>
+          <th>Rank</th>
+          <th>Votes</th>
+          <th>Speaker</th>
+          <th>Talk Title</th>
+          <th>Session</th>
+        </tr>
+      </thead>
+      <tbody id="results-body"></tbody>
+    </table>
+
+    <!-- QR Code Modal -->
+    <div id="qr-modal" class="modal hidden">
+      <div class="modal-content">
+        <h2>Poll QR Code</h2>
+        <p>Point your phone camera at this code to open the poll:</p>
+        <div id="qr-url-display" class="qr-url"></div>
+        <img id="qr-image" alt="QR Code" />
+        <div class="modal-field">
+          <label for="base-url-input">Base URL (change if needed):</label>
+          <input type="text" id="base-url-input" placeholder="http://192.168.1.x:3000">
+          <button id="btn-regen-qr" class="btn btn-small">Regenerate</button>
+        </div>
+        <button id="btn-close-qr" class="btn btn-secondary">Close</button>
+      </div>
+    </div>
+
+    <!-- Reset Modal -->
+    <div id="reset-modal" class="modal hidden">
+      <div class="modal-content">
+        <h2>Reset Poll</h2>
+        <p>This will clear <strong>all</strong> votes and allow everyone to vote again.</p>
+        <div class="modal-field">
+          <label for="max-votes-input">How many votes should each person get?</label>
+          <input type="number" id="max-votes-input" min="1" max="34" value="3">
+        </div>
+        <div class="modal-actions">
+          <button id="btn-confirm-reset" class="btn btn-danger">Reset Now</button>
+          <button id="btn-cancel-reset" class="btn btn-secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <!-- Change Password Modal -->
+    <div id="pw-modal" class="modal hidden">
+      <div class="modal-content">
+        <h2>Change Admin Password</h2>
+        <div class="modal-field">
+          <label for="new-pw-input">New password:</label>
+          <input type="password" id="new-pw-input" minlength="4" placeholder="Enter new password">
+        </div>
+        <div class="modal-field">
+          <label for="confirm-pw-input">Confirm password:</label>
+          <input type="password" id="confirm-pw-input" minlength="4" placeholder="Confirm new password">
+        </div>
+        <p id="pw-error" class="error hidden"></p>
+        <div class="modal-actions">
+          <button id="btn-confirm-pw" class="btn btn-primary">Save</button>
+          <button id="btn-cancel-pw" class="btn btn-secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let adminToken = sessionStorage.getItem('adminToken') || '';
+
+    // --- Helpers ---
+    async function api(url, opts = {}) {
+      const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+      if (adminToken) headers['X-Admin-Token'] = adminToken;
+      const res = await fetch(url, { ...opts, headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Request failed');
+      return data;
+    }
+
+    function show(el) { el.classList.remove('hidden'); }
+    function hide(el) { el.classList.add('hidden'); }
+
+    // --- Login ---
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const pw = document.getElementById('password-input').value;
+      try {
+        const data = await api('/api/admin/login', {
+          method: 'POST',
+          body: JSON.stringify({ password: pw })
+        });
+        adminToken = data.token;
+        sessionStorage.setItem('adminToken', adminToken);
+        hide(document.getElementById('login-screen'));
+        show(document.getElementById('dashboard-screen'));
+        loadResults();
+      } catch (err) {
+        const errEl = document.getElementById('login-error');
+        errEl.textContent = err.message;
+        show(errEl);
+      }
+    });
+
+    // Auto-login if token exists
+    (async () => {
+      if (adminToken) {
+        try {
+          await api('/api/admin/results');
+          hide(document.getElementById('login-screen'));
+          show(document.getElementById('dashboard-screen'));
+          loadResults();
+        } catch {
+          sessionStorage.removeItem('adminToken');
+          adminToken = '';
+        }
+      }
+    })();
+
+    // --- Results ---
+    async function loadResults() {
+      try {
+        const data = await api('/api/admin/results');
+        document.getElementById('stat-voters').textContent = data.totalVoters;
+        document.getElementById('stat-max').textContent = data.maxVotes;
+        document.getElementById('stat-gen').textContent = data.pollGeneration;
+
+        const tbody = document.getElementById('results-body');
+        tbody.innerHTML = '';
+        data.results.forEach((r, i) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${i + 1}</td>
+            <td class="vote-count">${r.votes}</td>
+            <td>${esc(r.speaker)}</td>
+            <td><a href="${esc(r.summaryUrl)}" target="_blank">${esc(r.title)}</a></td>
+            <td>${esc(r.session)}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        if (err.message === 'Unauthorized') {
+          sessionStorage.removeItem('adminToken');
+          adminToken = '';
+          show(document.getElementById('login-screen'));
+          hide(document.getElementById('dashboard-screen'));
+        }
+      }
+    }
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    // --- Refresh ---
+    document.getElementById('btn-refresh').addEventListener('click', loadResults);
+
+    // --- Logout ---
+    document.getElementById('btn-logout').addEventListener('click', async () => {
+      try { await api('/api/admin/logout', { method: 'POST' }); } catch {}
+      sessionStorage.removeItem('adminToken');
+      adminToken = '';
+      show(document.getElementById('login-screen'));
+      hide(document.getElementById('dashboard-screen'));
+    });
+
+    // --- QR Code ---
+    document.getElementById('btn-qr').addEventListener('click', async () => {
+      show(document.getElementById('qr-modal'));
+      await generateQR();
+    });
+
+    async function generateQR(baseUrl) {
+      try {
+        const url = baseUrl ? `/api/admin/qrcode?baseUrl=${encodeURIComponent(baseUrl)}` : '/api/admin/qrcode';
+        const data = await api(url);
+        document.getElementById('qr-image').src = data.qrDataUrl;
+        document.getElementById('qr-url-display').textContent = data.pollUrl;
+        if (!baseUrl) {
+          document.getElementById('base-url-input').value = data.pollUrl.replace(/\/$/, '');
+        }
+      } catch (err) {
+        alert('Failed to generate QR code: ' + err.message);
+      }
+    }
+
+    document.getElementById('btn-regen-qr').addEventListener('click', () => {
+      const url = document.getElementById('base-url-input').value.trim();
+      if (url) generateQR(url);
+    });
+
+    document.getElementById('btn-close-qr').addEventListener('click', () => {
+      hide(document.getElementById('qr-modal'));
+    });
+
+    // --- Print ---
+    document.getElementById('btn-print').addEventListener('click', () => {
+      window.print();
+    });
+
+    // --- Save CSV ---
+    document.getElementById('btn-save').addEventListener('click', async () => {
+      try {
+        const data = await api('/api/admin/results');
+        let csv = 'Rank,Votes,Speaker,Title,Session\n';
+        data.results.forEach((r, i) => {
+          csv += `${i+1},${r.votes},"${r.speaker}","${r.title}","${r.session}"\n`;
+        });
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `conference-poll-results-${new Date().toISOString().slice(0,10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      } catch (err) {
+        alert('Failed to save: ' + err.message);
+      }
+    });
+
+    // --- Reset ---
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      document.getElementById('max-votes-input').value = 3;
+      show(document.getElementById('reset-modal'));
+    });
+
+    document.getElementById('btn-cancel-reset').addEventListener('click', () => {
+      hide(document.getElementById('reset-modal'));
+    });
+
+    // --- Change Password ---
+    document.getElementById('btn-change-pw').addEventListener('click', () => {
+      document.getElementById('new-pw-input').value = '';
+      document.getElementById('confirm-pw-input').value = '';
+      hide(document.getElementById('pw-error'));
+      show(document.getElementById('pw-modal'));
+    });
+
+    document.getElementById('btn-cancel-pw').addEventListener('click', () => {
+      hide(document.getElementById('pw-modal'));
+    });
+
+    document.getElementById('btn-confirm-pw').addEventListener('click', async () => {
+      const newPw = document.getElementById('new-pw-input').value;
+      const confirmPw = document.getElementById('confirm-pw-input').value;
+      const errEl = document.getElementById('pw-error');
+      hide(errEl);
+      if (newPw.length < 4) {
+        errEl.textContent = 'Password must be at least 4 characters.';
+        show(errEl); return;
+      }
+      if (newPw !== confirmPw) {
+        errEl.textContent = 'Passwords do not match.';
+        show(errEl); return;
+      }
+      try {
+        await api('/api/admin/change-password', {
+          method: 'POST',
+          body: JSON.stringify({ newPassword: newPw })
+        });
+        hide(document.getElementById('pw-modal'));
+        alert('Password changed successfully.');
+      } catch (err) {
+        errEl.textContent = err.message;
+        show(errEl);
+      }
+    });
+
+    document.getElementById('btn-confirm-reset').addEventListener('click', async () => {
+      const maxVotes = parseInt(document.getElementById('max-votes-input').value, 10);
+      if (isNaN(maxVotes) || maxVotes < 1 || maxVotes > 34) {
+        alert('Please enter a number between 1 and 34.');
+        return;
+      }
+      try {
+        await api('/api/admin/reset', {
+          method: 'POST',
+          body: JSON.stringify({ maxVotes })
+        });
+        hide(document.getElementById('reset-modal'));
+        loadResults();
+      } catch (err) {
+        alert('Reset failed: ' + err.message);
+      }
+    });
+  </script>
+</body>
+</html>

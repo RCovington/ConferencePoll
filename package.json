@@ -1,0 +1,15 @@
+{
+  "name": "conference-poll",
+  "version": "1.0.0",
+  "description": "April 2026 General Conference Talk Poll",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "qrcode": "^1.5.4",
+    "uuid": "^10.0.0",
+    "cookie-parser": "^1.4.7"
+  }
+}
