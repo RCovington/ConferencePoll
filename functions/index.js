@@ -2,7 +2,6 @@ const { onRequest } = require('firebase-functions/v2/https');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const { v4: uuidv4 } = require('uuid');
-const QRCode = require('qrcode');
 const crypto = require('crypto');
 
 const app = express();
@@ -140,6 +139,7 @@ app.get('/api/admin/qrcode', requireAdmin, async (req, res) => {
   const baseUrl = req.query.baseUrl || `${forwardedProto}://${forwardedHost}`;
   const pollUrl = `${baseUrl}/`;
   try {
+    const QRCode = require('qrcode');
     const qrDataUrl = await QRCode.toDataURL(pollUrl, { width: 400, margin: 2 });
     res.json({ qrDataUrl, pollUrl });
   } catch (err) {

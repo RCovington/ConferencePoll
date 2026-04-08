@@ -1,7 +1,10 @@
 {
   "functions": {
     "source": "functions",
-    "runtime": "nodejs22"
+    "runtime": "nodejs22",
+    "discovery": {
+      "timeout": 30
+    }
   },
   "hosting": {
     "public": "public",
