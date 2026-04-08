@@ -16,7 +16,7 @@
   --shadow: 0 1px 3px rgba(0,0,0,.1);
   --olive: rgba(140, 148, 98, 0.56);
   --olive-solid: #8c9462;
-  --banner-overlay: rgba(97, 90, 83, 0.45);
+  --banner-overlay: rgba(97, 90, 83, 0.20);
 }
 
 body {
