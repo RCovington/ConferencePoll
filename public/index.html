@@ -3,15 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Conference Talk Poll — April 2026</title>
+  <title>Conference Talk Poll — Sunset Ridge 2nd Ward</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="poll-container">
-    <header class="poll-header">
+  <!-- Site Banner -->
+  <div class="site-banner">
+    <div class="banner-content">
+      <div class="ward-name">Sunset Ridge 2nd Ward</div>
       <h1>April 2026 General Conference Talk Poll</h1>
-      <p id="instructions" class="instructions"></p>
-    </header>
+      <div class="banner-sub" id="instructions"></div>
+    </div>
+  </div>
+  <nav class="site-nav">
+    <a href="/" class="active">Vote</a>
+    <a href="https://www.ssr2.org" target="_blank">Ward Site</a>
+  </nav>
+
+  <div class="poll-container">
 
     <!-- Sort controls -->
     <div id="sort-bar" class="sort-bar">
@@ -20,6 +29,7 @@
       <button class="btn btn-sort" data-sort="title">Talk Title</button>
       <button class="btn btn-sort" data-sort="first">Speaker First Name</button>
       <button class="btn btn-sort" data-sort="last">Speaker Last Name</button>
+      <button class="btn btn-sort" data-sort="topic">Topic</button>
     </div>
 
     <!-- Talk list -->
@@ -69,7 +79,8 @@
         const pa = parseSpeaker(a.speaker);
         const pb = parseSpeaker(b.speaker);
         return pa.lastName.localeCompare(pb.lastName) || pa.firstName.localeCompare(pb.firstName);
-      }
+      },
+      topic: (a, b) => a.topic.localeCompare(b.topic) || a.title.localeCompare(b.title)
     };
 
     let currentSort = 'session';
@@ -82,12 +93,15 @@
 
       let lastSession = '';
       sorted.forEach(talk => {
-        // Session divider for session-order sort
-        if (currentSort === 'session' && talk.session !== lastSession) {
-          lastSession = talk.session;
+        // Group dividers for session-order and topic sorts
+        const groupKey = currentSort === 'session' ? talk.session
+                       : currentSort === 'topic' ? talk.topic
+                       : null;
+        if (groupKey && groupKey !== lastSession) {
+          lastSession = groupKey;
           const divider = document.createElement('div');
           divider.className = 'session-divider';
-          divider.textContent = talk.session + ' Session';
+          divider.textContent = currentSort === 'session' ? groupKey + ' Session' : groupKey;
           container.appendChild(divider);
         }
 
@@ -102,6 +116,7 @@
           <div class="talk-info">
             <div class="talk-title"><a href="${esc(talk.summaryUrl)}" target="_blank" onclick="event.stopPropagation()">${esc(talk.title)}</a></div>
             <div class="talk-speaker">${esc(talk.speaker)}</div>
+            <div class="talk-topic">${esc(talk.topic)}</div>
             <div class="talk-session">${esc(talk.session)}</div>
           </div>
         `;
