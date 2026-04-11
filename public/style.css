@@ -353,6 +353,188 @@ a:hover { text-decoration: underline; }
 .your-picks ul { list-style: disc; padding-left: 20px; }
 .your-picks li { margin-bottom: 6px; font-size: 14px; }
 
+/* --- Checkmark animation (thank-you) --- */
+.checkmark-circle {
+  width: 72px; height: 72px; margin: 0 auto 16px; position: relative;
+  border-radius: 50%; background: #16a34a;
+  display: flex; align-items: center; justify-content: center;
+  animation: popIn .4s cubic-bezier(.17,.67,.35,1.2);
+}
+.checkmark-circle svg { width: 40px; height: 40px; }
+.checkmark-circle svg path {
+  stroke: #fff; stroke-width: 3; fill: none;
+  stroke-dasharray: 40; stroke-dashoffset: 40;
+  animation: drawCheck .4s .3s forwards;
+}
+@keyframes popIn { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+@keyframes drawCheck { to { stroke-dashoffset: 0; } }
+
+/* --- Search box --- */
+.search-box {
+  width: 100%; padding: 10px 14px; border: 1px solid var(--border);
+  border-radius: var(--radius); font-size: 15px; margin-bottom: 12px;
+  background: var(--card-bg); color: var(--text);
+}
+.search-box:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(40,114,250,.15); }
+
+/* --- Progress indicator --- */
+.progress-dots {
+  display: flex; align-items: center; gap: 8px;
+}
+.progress-dot {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 2px solid var(--olive-solid);
+  transition: background .2s, transform .2s;
+}
+.progress-dot.filled {
+  background: var(--olive-solid);
+  transform: scale(1.15);
+}
+.progress-label { font-size: 13px; font-weight: 600; color: var(--text-light); margin-left: 4px; }
+
+/* --- Mobile sort dropdown --- */
+.sort-dropdown {
+  display: none;
+  width: 100%; padding: 8px 12px; border: 1px solid var(--border);
+  border-radius: var(--radius); font-size: 14px;
+  background: var(--card-bg); color: var(--text);
+}
+@media (max-width: 768px) {
+  .sort-bar .btn-sort { display: none; }
+  .sort-dropdown { display: block; flex: 1; }
+}
+
+/* --- Desktop voter table --- */
+.voter-table { display: none; width: 100%; border-collapse: collapse; background: var(--card-bg); margin-bottom: 100px; }
+.voter-table th {
+  text-align: left; padding: 10px 14px; background: var(--bg);
+  font-size: 13px; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--text-light); border-bottom: 2px solid var(--border);
+  cursor: pointer; user-select: none; white-space: nowrap; position: sticky; top: 0; z-index: 2;
+}
+.voter-table th:hover { color: var(--primary); }
+.voter-table th .sort-arrow { font-size: 11px; margin-left: 4px; opacity: .4; }
+.voter-table th.sorted .sort-arrow { opacity: 1; color: var(--olive-solid); }
+.voter-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 14px; }
+.voter-table tr:hover { background: #f8fafc; }
+.voter-table tr.selected-row { background: #f4f5ef; }
+.voter-table input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--olive-solid); }
+@media (min-width: 769px) {
+  .voter-table { display: table; }
+  .talk-list { display: none !important; }
+  .session-divider { display: none; }
+}
+
+/* --- Confirmation modal --- */
+.confirm-modal { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 200; }
+.confirm-modal .modal-content { max-width: 420px; }
+.confirm-list { text-align: left; margin: 12px 0; max-height: 300px; overflow-y: auto; }
+.confirm-list li { padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+
+/* --- Loading skeleton --- */
+.skeleton-card {
+  height: 72px; border-radius: var(--radius); background: var(--border);
+  margin-bottom: 6px; position: relative; overflow: hidden;
+}
+.skeleton-card::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent);
+  animation: shimmer 1.5s infinite;
+}
+@keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+
+/* --- Topic badges --- */
+.topic-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 12px;
+  font-size: 11px; font-weight: 600; letter-spacing: .3px; white-space: nowrap;
+}
+.topic-faith      { background: #dbeafe; color: #1e40af; }
+.topic-grace      { background: #ede9fe; color: #5b21b6; }
+.topic-covenant   { background: #dcfce7; color: #166534; }
+.topic-minister   { background: #ccfbf1; color: #115e59; }
+.topic-prayer     { background: #fef3c7; color: #92400e; }
+.topic-love       { background: #fce7f3; color: #9d174d; }
+.topic-easter     { background: #ffedd5; color: #9a3412; }
+
+/* --- Card animations --- */
+.talk-card {
+  transition: border-color .15s, box-shadow .15s, background .2s, transform .15s;
+}
+.talk-card.selected { transform: scale(1.01); }
+
+/* --- Admin: Bar chart --- */
+.bar-chart { padding: 16px 24px; background: var(--card-bg); border-bottom: 1px solid var(--border); }
+.bar-chart h3 { font-size: 14px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-light); margin-bottom: 12px; }
+.bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; }
+.bar-label { width: 200px; min-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; color: var(--text-light); }
+.bar-track { flex: 1; height: 20px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+.bar-fill { height: 100%; background: var(--olive-solid); border-radius: 4px; transition: width .4s ease; min-width: 0; }
+.bar-value { width: 30px; text-align: right; font-weight: 700; color: var(--olive-solid); }
+
+/* --- Admin: Connected users panel --- */
+.connected-panel {
+  display: flex; gap: 24px; padding: 12px 24px;
+  background: var(--text); color: #fff; font-size: 13px;
+  border-bottom: 1px solid rgba(255,255,255,.1);
+}
+.connected-stat { display: flex; flex-direction: column; align-items: center; }
+.connected-number { font-size: 22px; font-weight: 700; line-height: 1.2; }
+.connected-label { font-size: 11px; opacity: .7; text-transform: uppercase; letter-spacing: .5px; }
+
+/* --- Admin: New voters badge --- */
+.new-voters-badge {
+  display: inline-block; background: #16a34a; color: #fff;
+  font-size: 11px; font-weight: 700; padding: 2px 8px;
+  border-radius: 10px; margin-left: 8px; animation: fadeInBadge .3s;
+}
+@keyframes fadeInBadge { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: scale(1); } }
+
+/* --- Admin: Sortable table headers --- */
+.results-table th { cursor: pointer; user-select: none; }
+.results-table th:hover { color: var(--primary); }
+.results-table th .sort-arrow { font-size: 11px; margin-left: 4px; opacity: .4; }
+.results-table th.sorted .sort-arrow { opacity: 1; color: var(--olive-solid); }
+
+/* --- Print tweaks --- */
+@media print {
+  .site-banner, .site-nav, .admin-header, .header-actions, .stats-bar,
+  .connected-panel, .bar-chart, button { display: none !important; }
+  .results-table { font-size: 12px; }
+}
+
+/* ====================== */
+/* DARK MODE               */
+/* ====================== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1419;
+    --card-bg: #1a2332;
+    --border: #2a3a4e;
+    --text: #e1e8ed;
+    --text-light: #8899a6;
+    --secondary: #8899a6;
+    --shadow: 0 1px 3px rgba(0,0,0,.4);
+    --olive: rgba(160,168,118,0.56);
+    --olive-solid: #a0a876;
+  }
+  a { color: #5b9aff; }
+  .site-banner .ward-name { color: rgba(255,255,255,.6); }
+  .talk-card:hover { border-color: #4a5568; }
+  .talk-card.selected { background: #242e1f; border-color: var(--olive-solid); }
+  .results-table tr:hover, .voter-table tr:hover { background: #1e2d3d; }
+  .voter-table tr.selected-row { background: #242e1f; }
+  .btn-sort { background: var(--card-bg); border-color: var(--border); color: var(--text-light); }
+  .btn-secondary { background: var(--border); color: var(--text); }
+  .login-box input, .modal-field input, .search-box, .sort-dropdown {
+    background: var(--bg); color: var(--text); border-color: var(--border);
+  }
+  .skeleton-card { background: #2a3a4e; }
+  .skeleton-card::after { background: linear-gradient(90deg, transparent, rgba(255,255,255,.05), transparent); }
+  .bar-track { background: #2a3a4e; }
+  .submit-bar { background: var(--card-bg); border-color: var(--border); }
+  .header-actions .btn-small { color: #e1e8ed; }
+}
+
 /* --- Shake animation --- */
 @keyframes shake {
   0%, 100% { transform: translateX(0); }

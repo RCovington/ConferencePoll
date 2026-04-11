@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Conference Talk Poll — Sunset Ridge 2nd Ward</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗳️</text></svg>">
 </head>
 <body>
   <!-- Site Banner -->
@@ -22,9 +23,19 @@
 
   <div class="poll-container">
 
+    <!-- Search box -->
+    <input type="text" id="search-box" class="search-box" placeholder="Search talks by speaker, title, or topic…">
+
     <!-- Sort controls -->
     <div id="sort-bar" class="sort-bar">
       <label>Sort by:</label>
+      <select id="sort-dropdown" class="sort-dropdown">
+        <option value="session">Session Order</option>
+        <option value="title">Talk Title</option>
+        <option value="first">Speaker First Name</option>
+        <option value="last">Speaker Last Name</option>
+        <option value="topic">Topic</option>
+      </select>
       <button class="btn btn-sort active" data-sort="session">Session Order</button>
       <button class="btn btn-sort" data-sort="title">Talk Title</button>
       <button class="btn btn-sort" data-sort="first">Speaker First Name</button>
@@ -32,17 +43,54 @@
       <button class="btn btn-sort" data-sort="topic">Topic</button>
     </div>
 
-    <!-- Talk list -->
+    <!-- Loading skeleton -->
+    <div id="skeleton-loader">
+      <div class="skeleton-card"></div><div class="skeleton-card"></div>
+      <div class="skeleton-card"></div><div class="skeleton-card"></div>
+      <div class="skeleton-card"></div><div class="skeleton-card"></div>
+    </div>
+
+    <!-- Desktop table view -->
+    <table id="voter-table" class="voter-table hidden">
+      <thead>
+        <tr>
+          <th style="width:40px"></th>
+          <th data-col="title">Talk Title <span class="sort-arrow">▲</span></th>
+          <th data-col="last">Speaker <span class="sort-arrow">▲</span></th>
+          <th data-col="topic">Topic <span class="sort-arrow">▲</span></th>
+          <th data-col="session">Session <span class="sort-arrow">▲</span></th>
+        </tr>
+      </thead>
+      <tbody id="voter-table-body"></tbody>
+    </table>
+
+    <!-- Mobile card view -->
     <div id="talk-list" class="talk-list"></div>
 
     <!-- Submit bar -->
     <div id="submit-bar" class="submit-bar">
-      <span id="selection-count">0 selected</span>
+      <div class="progress-dots" id="progress-dots"></div>
       <button id="btn-submit" class="btn btn-primary" disabled>Submit Votes</button>
+    </div>
+
+    <!-- Confirmation modal -->
+    <div id="confirm-modal" class="confirm-modal hidden">
+      <div class="modal-content">
+        <h2>Confirm Your Votes</h2>
+        <p>You selected the following talks:</p>
+        <ul id="confirm-list" class="confirm-list"></ul>
+        <div class="modal-actions">
+          <button id="btn-confirm-yes" class="btn btn-primary">Submit</button>
+          <button id="btn-confirm-no" class="btn btn-secondary">Go Back</button>
+        </div>
+      </div>
     </div>
 
     <!-- Thank you screen -->
     <div id="thank-you" class="thank-you hidden">
+      <div class="checkmark-circle">
+        <svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+      </div>
       <h2>Thank you for voting!</h2>
       <p>Your selections have been recorded.</p>
       <div id="your-picks" class="your-picks"></div>
@@ -55,15 +103,28 @@
     let pollGeneration = 0;
     let selected = new Set();
     let hasVoted = false;
+    let searchQuery = '';
+
+    // --- Topic badge helper ---
+    const topicClasses = {
+      'Faith & Testimony': 'topic-faith',
+      'Grace & Redemption': 'topic-grace',
+      'Covenant Discipleship': 'topic-covenant',
+      'Ministering & Service': 'topic-minister',
+      'Prayer & Spiritual Growth': 'topic-prayer',
+      'Love & Relationships': 'topic-love',
+      'Easter & the Resurrection': 'topic-easter'
+    };
+    function topicBadge(topic) {
+      const cls = topicClasses[topic] || '';
+      return `<span class="topic-badge ${esc(cls)}">${esc(topic)}</span>`;
+    }
 
     // --- Parse speaker names ---
     function parseSpeaker(speaker) {
-      // Remove title prefix (President, Elder, Sister, Brother)
       const stripped = speaker.replace(/^(President|Elder|Sister|Brother)\s+/i, '');
       const parts = stripped.split(/\s+/);
-      const firstName = parts[0] || '';
-      const lastName = parts[parts.length - 1] || '';
-      return { firstName, lastName, fullName: stripped };
+      return { firstName: parts[0] || '', lastName: parts[parts.length - 1] || '' };
     }
 
     // --- Sort functions ---
@@ -71,34 +132,41 @@
       session: (a, b) => (a.sessionOrder - b.sessionOrder) || (a.order - b.order),
       title: (a, b) => a.title.localeCompare(b.title),
       first: (a, b) => {
-        const pa = parseSpeaker(a.speaker);
-        const pb = parseSpeaker(b.speaker);
+        const pa = parseSpeaker(a.speaker), pb = parseSpeaker(b.speaker);
         return pa.firstName.localeCompare(pb.firstName) || pa.lastName.localeCompare(pb.lastName);
       },
       last: (a, b) => {
-        const pa = parseSpeaker(a.speaker);
-        const pb = parseSpeaker(b.speaker);
+        const pa = parseSpeaker(a.speaker), pb = parseSpeaker(b.speaker);
         return pa.lastName.localeCompare(pb.lastName) || pa.firstName.localeCompare(pb.firstName);
       },
       topic: (a, b) => a.topic.localeCompare(b.topic) || a.title.localeCompare(b.title)
     };
-
     let currentSort = 'session';
+    let sortDirection = 1; // 1 = asc, -1 = desc
 
-    // --- Render ---
-    function renderTalks() {
-      const sorted = [...talks].sort(sorters[currentSort]);
+    // --- Filter ---
+    function filterTalks() {
+      if (!searchQuery) return talks;
+      const q = searchQuery.toLowerCase();
+      return talks.filter(t =>
+        t.speaker.toLowerCase().includes(q) ||
+        t.title.toLowerCase().includes(q) ||
+        t.topic.toLowerCase().includes(q)
+      );
+    }
+
+    // --- Render cards (mobile) ---
+    function renderCards() {
+      const sorted = filterTalks().sort((a, b) => sorters[currentSort](a, b) * sortDirection);
       const container = document.getElementById('talk-list');
       container.innerHTML = '';
 
-      let lastSession = '';
+      let lastGroup = '';
       sorted.forEach(talk => {
-        // Group dividers for session-order and topic sorts
         const groupKey = currentSort === 'session' ? talk.session
-                       : currentSort === 'topic' ? talk.topic
-                       : null;
-        if (groupKey && groupKey !== lastSession) {
-          lastSession = groupKey;
+                       : currentSort === 'topic' ? talk.topic : null;
+        if (groupKey && groupKey !== lastGroup) {
+          lastGroup = groupKey;
           const divider = document.createElement('div');
           divider.className = 'session-divider';
           divider.textContent = currentSort === 'session' ? groupKey + ' Session' : groupKey;
@@ -116,37 +184,83 @@
           <div class="talk-info">
             <div class="talk-title"><a href="${esc(talk.summaryUrl)}" target="_blank" onclick="event.stopPropagation()">${esc(talk.title)}</a></div>
             <div class="talk-speaker">${esc(talk.speaker)}</div>
-            <div class="talk-topic">${esc(talk.topic)}</div>
+            <div style="margin:3px 0">${topicBadge(talk.topic)}</div>
             <div class="talk-session">${esc(talk.session)}</div>
           </div>
         `;
-
-        const cb = card.querySelector('input');
-        cb.addEventListener('change', () => {
-          if (hasVoted) return;
-          if (cb.checked) {
-            if (selected.size >= maxVotes) {
-              cb.checked = false;
-              shakeSubmitBar();
-              return;
-            }
-            selected.add(talk.id);
-          } else {
-            selected.delete(talk.id);
-          }
-          updateSelectionUI();
-          renderTalks();
-        });
-
+        card.querySelector('input').addEventListener('change', (e) => toggleSelection(talk.id, e.target));
         container.appendChild(card);
       });
     }
 
+    // --- Render table (desktop) ---
+    function renderTable() {
+      const sorted = filterTalks().sort((a, b) => sorters[currentSort](a, b) * sortDirection);
+      const tbody = document.getElementById('voter-table-body');
+      tbody.innerHTML = '';
+
+      sorted.forEach(talk => {
+        const tr = document.createElement('tr');
+        if (selected.has(talk.id)) tr.classList.add('selected-row');
+        if (hasVoted) tr.style.opacity = '.6';
+        tr.innerHTML = `
+          <td><input type="checkbox" value="${talk.id}"
+                ${selected.has(talk.id) ? 'checked' : ''}
+                ${hasVoted ? 'disabled' : ''}></td>
+          <td><a href="${esc(talk.summaryUrl)}" target="_blank">${esc(talk.title)}</a></td>
+          <td>${esc(talk.speaker)}</td>
+          <td>${topicBadge(talk.topic)}</td>
+          <td>${esc(talk.session)}</td>
+        `;
+        tr.querySelector('input').addEventListener('change', (e) => toggleSelection(talk.id, e.target));
+        tbody.appendChild(tr);
+      });
+
+      // Update header sort arrows
+      document.querySelectorAll('.voter-table th[data-col]').forEach(th => {
+        th.classList.toggle('sorted', th.dataset.col === currentSort);
+        const arrow = th.querySelector('.sort-arrow');
+        if (arrow) arrow.textContent = (th.dataset.col === currentSort && sortDirection === -1) ? '▼' : '▲';
+      });
+    }
+
+    function render() { renderCards(); renderTable(); }
+
+    // --- Selection toggle ---
+    function toggleSelection(id, cbEl) {
+      if (hasVoted) return;
+      if (cbEl.checked) {
+        if (selected.size >= maxVotes) {
+          cbEl.checked = false;
+          shakeSubmitBar();
+          return;
+        }
+        selected.add(id);
+      } else {
+        selected.delete(id);
+      }
+      updateSelectionUI();
+      render();
+    }
+
+    // --- Progress dots ---
+    function buildProgressDots() {
+      const container = document.getElementById('progress-dots');
+      container.innerHTML = '';
+      for (let i = 0; i < maxVotes; i++) {
+        const dot = document.createElement('div');
+        dot.className = 'progress-dot' + (i < selected.size ? ' filled' : '');
+        container.appendChild(dot);
+      }
+      const label = document.createElement('span');
+      label.className = 'progress-label';
+      label.textContent = `${selected.size} of ${maxVotes}`;
+      container.appendChild(label);
+    }
+
     function updateSelectionUI() {
-      const count = selected.size;
-      document.getElementById('selection-count').textContent =
-        `${count} of ${maxVotes} selected`;
-      document.getElementById('btn-submit').disabled = count === 0 || hasVoted;
+      buildProgressDots();
+      document.getElementById('btn-submit').disabled = selected.size === 0 || hasVoted;
     }
 
     function shakeSubmitBar() {
@@ -161,19 +275,62 @@
       return d.innerHTML;
     }
 
-    // --- Sort buttons ---
+    // --- Sort buttons (desktop) ---
     document.querySelectorAll('.btn-sort').forEach(btn => {
       btn.addEventListener('click', () => {
+        const newSort = btn.dataset.sort;
+        if (newSort === currentSort) { sortDirection *= -1; }
+        else { currentSort = newSort; sortDirection = 1; }
         document.querySelectorAll('.btn-sort').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        currentSort = btn.dataset.sort;
-        renderTalks();
+        document.getElementById('sort-dropdown').value = currentSort;
+        render();
       });
     });
 
-    // --- Submit ---
-    document.getElementById('btn-submit').addEventListener('click', async () => {
+    // --- Sort dropdown (mobile) ---
+    document.getElementById('sort-dropdown').addEventListener('change', (e) => {
+      currentSort = e.target.value;
+      sortDirection = 1;
+      document.querySelectorAll('.btn-sort').forEach(b => b.classList.toggle('active', b.dataset.sort === currentSort));
+      render();
+    });
+
+    // --- Table header sort (desktop) ---
+    document.querySelectorAll('.voter-table th[data-col]').forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.dataset.col;
+        if (col === currentSort) { sortDirection *= -1; }
+        else { currentSort = col; sortDirection = 1; }
+        document.querySelectorAll('.btn-sort').forEach(b => b.classList.toggle('active', b.dataset.sort === currentSort));
+        document.getElementById('sort-dropdown').value = currentSort;
+        render();
+      });
+    });
+
+    // --- Search ---
+    document.getElementById('search-box').addEventListener('input', (e) => {
+      searchQuery = e.target.value.trim();
+      render();
+    });
+
+    // --- Submit (show confirmation) ---
+    document.getElementById('btn-submit').addEventListener('click', () => {
       if (selected.size === 0 || hasVoted) return;
+      const list = document.getElementById('confirm-list');
+      list.innerHTML = '';
+      talks.filter(t => selected.has(t.id)).forEach(t => {
+        const li = document.createElement('li');
+        li.innerHTML = `<strong>${esc(t.speaker)}</strong> — ${esc(t.title)}`;
+        list.appendChild(li);
+      });
+      document.getElementById('confirm-modal').classList.remove('hidden');
+    });
+    document.getElementById('btn-confirm-no').addEventListener('click', () => {
+      document.getElementById('confirm-modal').classList.add('hidden');
+    });
+    document.getElementById('btn-confirm-yes').addEventListener('click', async () => {
+      document.getElementById('confirm-modal').classList.add('hidden');
       try {
         const res = await fetch('/api/vote', {
           method: 'POST',
@@ -181,21 +338,18 @@
           body: JSON.stringify({ talkIds: [...selected] })
         });
         const data = await res.json();
-        if (!res.ok) {
-          alert(data.error || 'Vote failed.');
-          return;
-        }
+        if (!res.ok) { alert(data.error || 'Vote failed.'); return; }
         hasVoted = true;
         showThankYou();
-      } catch (err) {
-        alert('Network error. Please try again.');
-      }
+      } catch (err) { alert('Network error. Please try again.'); }
     });
 
     function showThankYou() {
       document.getElementById('submit-bar').classList.add('hidden');
       document.getElementById('sort-bar').classList.add('hidden');
       document.getElementById('talk-list').classList.add('hidden');
+      document.getElementById('voter-table').classList.add('hidden');
+      document.getElementById('search-box').classList.add('hidden');
       const ty = document.getElementById('thank-you');
       ty.classList.remove('hidden');
 
@@ -208,14 +362,21 @@
         ul.appendChild(li);
       });
       picks.appendChild(ul);
-
-      renderTalks();
     }
+
+    // --- Heartbeat ---
+    function sendHeartbeat() {
+      fetch('/api/heartbeat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentSelections: selected.size })
+      }).catch(() => {});
+    }
+    setInterval(sendHeartbeat, 10000);
 
     // --- Init ---
     (async () => {
       try {
-        // Load talks
         const talkData = await (await fetch('/api/talks')).json();
         talks = talkData.talks;
         maxVotes = talkData.maxVotes;
@@ -224,7 +385,9 @@
         document.getElementById('instructions').textContent =
           `Choose up to ${maxVotes} of your favorite talks, then submit your vote.`;
 
-        // Check voter status
+        document.getElementById('skeleton-loader').remove();
+        document.getElementById('voter-table').classList.remove('hidden');
+
         const status = await (await fetch('/api/voter/status')).json();
         if (status.hasVoted) {
           hasVoted = true;
@@ -232,10 +395,11 @@
           showThankYou();
         }
 
-        renderTalks();
+        render();
         updateSelectionUI();
+        sendHeartbeat();
       } catch (err) {
-        document.getElementById('talk-list').innerHTML =
+        document.getElementById('skeleton-loader').innerHTML =
           '<p class="error">Failed to load talks. Please refresh.</p>';
       }
     })();

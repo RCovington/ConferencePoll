@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Conference Poll — Sunset Ridge 2nd Ward Manager</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗳️</text></svg>">
 </head>
 <body>
   <!-- Site Banner -->
@@ -36,17 +37,38 @@
   <!-- Admin Dashboard -->
   <div id="dashboard-screen" class="screen hidden">
     <header class="admin-header">
-      <h1>Dashboard</h1>
+      <h1>Dashboard <span id="new-voters-badge"></span></h1>
       <div class="header-actions">
         <button id="btn-refresh" class="btn btn-small" title="Refresh results">&#x21bb; Refresh</button>
         <button id="btn-qr" class="btn btn-small">QR Code</button>
         <button id="btn-print" class="btn btn-small">Print</button>
         <button id="btn-save" class="btn btn-small">Save CSV</button>
+        <button id="btn-clipboard" class="btn btn-small">Copy for Sheets</button>
         <button id="btn-reset" class="btn btn-small btn-danger">Reset Poll</button>
         <button id="btn-change-pw" class="btn btn-small btn-secondary">Change Password</button>
         <button id="btn-logout" class="btn btn-small btn-secondary">Logout</button>
       </div>
     </header>
+
+    <!-- Connected users panel -->
+    <div class="connected-panel">
+      <div class="connected-stat">
+        <span class="connected-number" id="stat-connected">0</span>
+        <span class="connected-label">Connected</span>
+      </div>
+      <div class="connected-stat">
+        <span class="connected-number" id="stat-still-voting">0</span>
+        <span class="connected-label">Still Voting</span>
+      </div>
+      <div class="connected-stat">
+        <span class="connected-number" id="stat-submitted">0</span>
+        <span class="connected-label">Submitted</span>
+      </div>
+      <div class="connected-stat">
+        <span class="connected-number" id="stat-avg-remaining">0</span>
+        <span class="connected-label">Avg Votes Left</span>
+      </div>
+    </div>
 
     <div class="stats-bar">
       <span>Total voters: <strong id="stat-voters">0</strong></span>
@@ -54,15 +76,21 @@
       <span>Poll generation: <strong id="stat-gen">1</strong></span>
     </div>
 
+    <!-- Bar chart -->
+    <div class="bar-chart" id="bar-chart">
+      <h3>Vote Distribution</h3>
+      <div id="bar-chart-body"></div>
+    </div>
+
     <table id="results-table" class="results-table">
       <thead>
         <tr>
-          <th>Rank</th>
-          <th>Votes</th>
-          <th>Speaker</th>
-          <th>Talk Title</th>
-          <th>Topic</th>
-          <th>Session</th>
+          <th data-col="rank">Rank <span class="sort-arrow">▲</span></th>
+          <th data-col="votes">Votes <span class="sort-arrow">▲</span></th>
+          <th data-col="speaker">Speaker <span class="sort-arrow">▲</span></th>
+          <th data-col="title">Talk Title <span class="sort-arrow">▲</span></th>
+          <th data-col="topic">Topic <span class="sort-arrow">▲</span></th>
+          <th data-col="session">Session <span class="sort-arrow">▲</span></th>
         </tr>
       </thead>
       <tbody id="results-body"></tbody>
@@ -122,6 +150,10 @@
 
   <script>
     let adminToken = sessionStorage.getItem('adminToken') || '';
+    let lastResults = [];
+    let previousVoterCount = null;
+    let adminSort = 'rank';
+    let adminSortDir = 1;
 
     // --- Helpers ---
     async function api(url, opts = {}) {
@@ -135,6 +167,27 @@
 
     function show(el) { el.classList.remove('hidden'); }
     function hide(el) { el.classList.add('hidden'); }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+    // --- Parse speaker names ---
+    function parseSpeaker(sp) {
+      const stripped = sp.replace(/^(President|Elder|Sister|Brother)\s+/i, '');
+      const parts = stripped.split(/\s+/);
+      return { firstName: parts[0] || '', lastName: parts[parts.length - 1] || '' };
+    }
+
+    // --- Admin sort ---
+    const adminSorters = {
+      rank: (a, b) => (b.votes - a.votes) || (a.id - b.id),
+      votes: (a, b) => a.votes - b.votes,
+      speaker: (a, b) => {
+        const pa = parseSpeaker(a.speaker), pb = parseSpeaker(b.speaker);
+        return pa.lastName.localeCompare(pb.lastName) || pa.firstName.localeCompare(pb.firstName);
+      },
+      title: (a, b) => a.title.localeCompare(b.title),
+      topic: (a, b) => a.topic.localeCompare(b.topic),
+      session: (a, b) => (a.sessionOrder - b.sessionOrder) || (a.order - b.order)
+    };
 
     // --- Login ---
     document.getElementById('login-form').addEventListener('submit', async (e) => {
@@ -178,24 +231,32 @@
     async function loadResults() {
       try {
         const data = await api('/api/admin/results');
+
+        // Stats
         document.getElementById('stat-voters').textContent = data.totalVoters;
         document.getElementById('stat-max').textContent = data.maxVotes;
         document.getElementById('stat-gen').textContent = data.pollGeneration;
 
-        const tbody = document.getElementById('results-body');
-        tbody.innerHTML = '';
-        data.results.forEach((r, i) => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${i + 1}</td>
-            <td class="vote-count">${r.votes}</td>
-            <td>${esc(r.speaker)}</td>
-            <td><a href="${esc(r.summaryUrl)}" target="_blank">${esc(r.title)}</a></td>
-            <td>${esc(r.topic)}</td>
-            <td>${esc(r.session)}</td>
-          `;
-          tbody.appendChild(tr);
-        });
+        // Connected users panel
+        if (data.connected) {
+          document.getElementById('stat-connected').textContent = data.connected.total;
+          document.getElementById('stat-still-voting').textContent = data.connected.voting;
+          document.getElementById('stat-submitted').textContent = data.connected.submitted;
+          document.getElementById('stat-avg-remaining').textContent = data.connected.avgRemaining;
+        }
+
+        // New voters badge
+        if (previousVoterCount !== null && data.totalVoters > previousVoterCount) {
+          const diff = data.totalVoters - previousVoterCount;
+          const badge = document.getElementById('new-voters-badge');
+          badge.innerHTML = `<span class="new-voters-badge">+${diff} new</span>`;
+          setTimeout(() => { badge.innerHTML = ''; }, 5000);
+        }
+        previousVoterCount = data.totalVoters;
+
+        lastResults = data.results;
+        renderResults();
+        renderBarChart(data.results);
       } catch (err) {
         if (err.message === 'Unauthorized') {
           sessionStorage.removeItem('adminToken');
@@ -206,20 +267,75 @@
       }
     }
 
-    function esc(s) {
-      const d = document.createElement('div');
-      d.textContent = s;
-      return d.innerHTML;
+    function renderResults() {
+      const sorted = [...lastResults].sort((a, b) => {
+        const fn = adminSorters[adminSort] || adminSorters.rank;
+        return fn(a, b) * adminSortDir;
+      });
+
+      const tbody = document.getElementById('results-body');
+      tbody.innerHTML = '';
+      // Re-rank by original vote order for the rank column
+      const ranked = [...lastResults].sort(adminSorters.rank);
+      const rankMap = {};
+      ranked.forEach((r, i) => { rankMap[r.id] = i + 1; });
+
+      sorted.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${rankMap[r.id]}</td>
+          <td class="vote-count">${r.votes}</td>
+          <td>${esc(r.speaker)}</td>
+          <td><a href="${esc(r.summaryUrl)}" target="_blank">${esc(r.title)}</a></td>
+          <td>${esc(r.topic)}</td>
+          <td>${esc(r.session)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // Update sort arrows
+      document.querySelectorAll('.results-table th[data-col]').forEach(th => {
+        th.classList.toggle('sorted', th.dataset.col === adminSort);
+        const arrow = th.querySelector('.sort-arrow');
+        if (arrow) arrow.textContent = (th.dataset.col === adminSort && adminSortDir === -1) ? '▼' : '▲';
+      });
     }
+
+    function renderBarChart(results) {
+      const maxVote = Math.max(1, ...results.map(r => r.votes));
+      const top = [...results].sort((a, b) => b.votes - a.votes).slice(0, 15);
+      const body = document.getElementById('bar-chart-body');
+      body.innerHTML = '';
+      top.forEach(r => {
+        const pct = (r.votes / maxVote * 100).toFixed(1);
+        const row = document.createElement('div');
+        row.className = 'bar-row';
+        row.innerHTML = `
+          <span class="bar-label" title="${esc(r.speaker)}">${esc(parseSpeaker(r.speaker).lastName)}</span>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+          <span class="bar-value">${r.votes}</span>
+        `;
+        body.appendChild(row);
+      });
+    }
+
+    // --- Sortable table headers ---
+    document.querySelectorAll('.results-table th[data-col]').forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.dataset.col;
+        if (col === adminSort) { adminSortDir *= -1; }
+        else { adminSort = col; adminSortDir = (col === 'votes' || col === 'rank') ? -1 : 1; }
+        renderResults();
+      });
+    });
 
     // --- Refresh ---
     document.getElementById('btn-refresh').addEventListener('click', loadResults);
 
-    // Auto-refresh every 3 seconds
     let autoRefreshInterval = null;
     function startAutoRefresh() {
       if (!autoRefreshInterval) {
-        autoRefreshInterval = setInterval(loadResults, 3000);
+        autoRefreshInterval = setInterval(loadResults, 2000);
       }
     }
     function stopAutoRefresh() {
@@ -228,7 +344,6 @@
         autoRefreshInterval = null;
       }
     }
-    // auto-refresh is started after successful login or auto-login
 
     // --- Logout ---
     document.getElementById('btn-logout').addEventListener('click', async () => {
@@ -293,6 +408,22 @@
       }
     });
 
+    // --- Copy for Google Sheets (TSV to clipboard) ---
+    document.getElementById('btn-clipboard').addEventListener('click', () => {
+      if (!lastResults.length) { alert('No data to copy.'); return; }
+      const ranked = [...lastResults].sort((a, b) => (b.votes - a.votes) || (a.id - b.id));
+      let tsv = 'Rank\tVotes\tSpeaker\tTitle\tTopic\tSession\n';
+      ranked.forEach((r, i) => {
+        tsv += `${i+1}\t${r.votes}\t${r.speaker}\t${r.title}\t${r.topic}\t${r.session}\n`;
+      });
+      navigator.clipboard.writeText(tsv).then(() => {
+        const btn = document.getElementById('btn-clipboard');
+        const orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = orig; }, 2000);
+      }).catch(() => alert('Copy failed. Try Save CSV instead.'));
+    });
+
     // --- Reset ---
     document.getElementById('btn-reset').addEventListener('click', () => {
       document.getElementById('max-votes-input').value = 3;
@@ -301,6 +432,24 @@
 
     document.getElementById('btn-cancel-reset').addEventListener('click', () => {
       hide(document.getElementById('reset-modal'));
+    });
+
+    document.getElementById('btn-confirm-reset').addEventListener('click', async () => {
+      const maxVotes = parseInt(document.getElementById('max-votes-input').value, 10);
+      if (isNaN(maxVotes) || maxVotes < 1 || maxVotes > 32) {
+        alert('Please enter a number between 1 and 32.');
+        return;
+      }
+      try {
+        await api('/api/admin/reset', {
+          method: 'POST',
+          body: JSON.stringify({ maxVotes })
+        });
+        hide(document.getElementById('reset-modal'));
+        loadResults();
+      } catch (err) {
+        alert('Reset failed: ' + err.message);
+      }
     });
 
     // --- Change Password ---
@@ -338,24 +487,6 @@
       } catch (err) {
         errEl.textContent = err.message;
         show(errEl);
-      }
-    });
-
-    document.getElementById('btn-confirm-reset').addEventListener('click', async () => {
-      const maxVotes = parseInt(document.getElementById('max-votes-input').value, 10);
-      if (isNaN(maxVotes) || maxVotes < 1 || maxVotes > 32) {
-        alert('Please enter a number between 1 and 32.');
-        return;
-      }
-      try {
-        await api('/api/admin/reset', {
-          method: 'POST',
-          body: JSON.stringify({ maxVotes })
-        });
-        hide(document.getElementById('reset-modal'));
-        loadResults();
-      } catch (err) {
-        alert('Reset failed: ' + err.message);
       }
     });
   </script>

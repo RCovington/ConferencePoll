@@ -9,6 +9,26 @@ const app = express();
 app.use(express.json());
 app.use(cookieParser());
 
+// --- Rate Limiting ---
+const rateBuckets = new Map();
+function rateLimit(windowMs, maxReqs) {
+  return (req, res, next) => {
+    const key = req.ip || req.connection.remoteAddress;
+    const now = Date.now();
+    const hits = (rateBuckets.get(key) || []).filter(t => t > now - windowMs);
+    if (hits.length >= maxReqs) {
+      return res.status(429).json({ error: 'Too many requests. Please slow down.' });
+    }
+    hits.push(now);
+    rateBuckets.set(key, hits);
+    next();
+  };
+}
+// No periodic cleanup needed — Cloud Functions instances are short-lived.
+
+// --- Connected-user presence ---
+const connectedUsers = new Map();
+
 // --- Conference Talk Data ---
 const talks = [
   // Saturday Morning Session – April 4, 2026
@@ -106,11 +126,23 @@ app.get('/api/admin/results', requireAdmin, (req, res) => {
     votes: pollState.votes[t.id] || 0
   })).sort((a, b) => (b.votes - a.votes) || a.id - b.id);
 
+  const cutoff = Date.now() - 30000;
+  let connectedCount = 0, votingCount = 0, submittedCount = 0, totalRemaining = 0;
+  for (const [, d] of connectedUsers) {
+    if (d.lastSeen >= cutoff) {
+      connectedCount++;
+      if (d.hasVoted) { submittedCount++; }
+      else { votingCount++; totalRemaining += (pollState.maxVotes - (d.currentSelections || 0)); }
+    }
+  }
+
   res.json({
     results,
     totalVoters: pollState.voters.size,
     maxVotes: pollState.maxVotes,
-    pollGeneration: pollState.pollGeneration
+    pollGeneration: pollState.pollGeneration,
+    connected: { total: connectedCount, voting: votingCount, submitted: submittedCount,
+      avgRemaining: votingCount ? +(totalRemaining / votingCount).toFixed(1) : 0 }
   });
 });
 
@@ -173,7 +205,25 @@ app.get('/api/voter/status', (req, res) => {
   });
 });
 
-app.post('/api/vote', (req, res) => {
+// --- Heartbeat (presence) ---
+app.post('/api/heartbeat', (req, res) => {
+  let voterId = req.cookies.voterId;
+  if (!voterId) {
+    voterId = uuidv4();
+    const cookieOpts = { httpOnly: true, maxAge: 365 * 24 * 60 * 60 * 1000, sameSite: 'lax' };
+    res.cookie('voterId', voterId, cookieOpts);
+  }
+  const hasVoted = pollState.voters.has(voterId);
+  const currentSelections = parseInt(req.body.currentSelections, 10) || 0;
+  connectedUsers.set(voterId, {
+    lastSeen: Date.now(),
+    hasVoted,
+    currentSelections: hasVoted ? (pollState.voterSelections[voterId] || []).length : currentSelections
+  });
+  res.json({ ok: true });
+});
+
+app.post('/api/vote', rateLimit(60000, 10), (req, res) => {
   let voterId = req.cookies.voterId;
   const cookieGen = parseInt(req.cookies.pollGeneration, 10);
 
