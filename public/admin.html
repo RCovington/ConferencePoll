@@ -39,14 +39,17 @@
     <header class="admin-header">
       <h1>Dashboard <span id="new-voters-badge"></span></h1>
       <div class="header-actions">
-        <button id="btn-refresh" class="btn btn-small" title="Refresh results">&#x21bb; Refresh</button>
-        <button id="btn-qr" class="btn btn-small">QR Code</button>
-        <button id="btn-print" class="btn btn-small">Print</button>
-        <button id="btn-save" class="btn btn-small">Save CSV</button>
-        <button id="btn-clipboard" class="btn btn-small">Copy to Clipboard</button>
-        <button id="btn-reset" class="btn btn-small btn-danger">Reset Poll</button>
-        <button id="btn-change-pw" class="btn btn-small btn-secondary">Change Password</button>
-        <button id="btn-logout" class="btn btn-small btn-secondary">Logout</button>
+        <div class="actions-primary">
+          <button id="btn-qr" class="btn btn-small btn-primary">QR Code</button>
+          <button id="btn-reset" class="btn btn-small btn-danger">Reset Poll</button>
+        </div>
+        <div class="actions-secondary">
+          <button id="btn-print" class="btn btn-small">Print</button>
+          <button id="btn-save" class="btn btn-small">Save CSV</button>
+          <button id="btn-clipboard" class="btn btn-small">Copy to Clipboard</button>
+          <button id="btn-change-pw" class="btn btn-small">Change Password</button>
+          <button id="btn-logout" class="btn btn-small">Logout</button>
+        </div>
       </div>
     </header>
 
@@ -328,9 +331,6 @@
         renderResults();
       });
     });
-
-    // --- Refresh ---
-    document.getElementById('btn-refresh').addEventListener('click', loadResults);
 
     let autoRefreshInterval = null;
     function startAutoRefresh() {

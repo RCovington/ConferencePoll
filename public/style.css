@@ -180,9 +180,16 @@ a:hover { text-decoration: underline; }
   box-shadow: var(--shadow);
 }
 .admin-header h1 { color: #fff; font-size: 20px; }
-.header-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.header-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.actions-primary { display: flex; gap: 6px; }
+.actions-primary .btn-small { padding: 8px 16px; font-size: 14px; font-weight: 600; }
+.actions-secondary { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+.actions-secondary .btn-small { font-size: 12px; padding: 4px 10px; opacity: .7; }
+.actions-secondary .btn-small:hover { opacity: 1; }
 .header-actions .btn-small { color: #fff; background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.2); }
 .header-actions .btn-small:hover { background: rgba(255,255,255,.25); }
+.header-actions .btn-primary { background: var(--primary); border-color: var(--primary); }
+.header-actions .btn-primary:hover { background: var(--primary-hover); }
 .header-actions .btn-danger { background: var(--danger); border-color: var(--danger); }
 .header-actions .btn-danger:hover { background: var(--danger-hover); }
 
