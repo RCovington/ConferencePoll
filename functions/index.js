@@ -220,7 +220,7 @@ app.post('/api/heartbeat', (req, res) => {
     hasVoted,
     currentSelections: hasVoted ? (pollState.voterSelections[voterId] || []).length : currentSelections
   });
-  res.json({ ok: true });
+  res.json({ ok: true, pollGeneration: pollState.pollGeneration });
 });
 
 app.post('/api/vote', rateLimit(60000, 10), (req, res) => {

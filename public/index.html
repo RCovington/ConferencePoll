@@ -365,12 +365,21 @@
     }
 
     // --- Heartbeat ---
-    function sendHeartbeat() {
-      fetch('/api/heartbeat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentSelections: selected.size })
-      }).catch(() => {});
+    async function sendHeartbeat() {
+      try {
+        const res = await fetch('/api/heartbeat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ currentSelections: selected.size })
+        });
+        const data = await res.json();
+        if (data.pollGeneration && data.pollGeneration !== pollGeneration) {
+          // Poll was reset — save current selections so they can be restored
+          const ids = hasVoted ? [...selected] : [];
+          if (ids.length) localStorage.setItem('prevSelections', JSON.stringify(ids));
+          location.reload();
+        }
+      } catch {}
     }
     setInterval(sendHeartbeat, 10000);
 
@@ -393,6 +402,15 @@
           hasVoted = true;
           status.selections.forEach(id => selected.add(id));
           showThankYou();
+        } else {
+          // Restore selections from a previous poll generation (after reset)
+          const saved = localStorage.getItem('prevSelections');
+          if (saved) {
+            localStorage.removeItem('prevSelections');
+            const validIds = new Set(talks.map(t => t.id));
+            const prev = JSON.parse(saved).filter(id => validIds.has(id));
+            prev.slice(0, maxVotes).forEach(id => selected.add(id));
+          }
         }
 
         render();

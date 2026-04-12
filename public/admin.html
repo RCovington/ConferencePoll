@@ -102,7 +102,7 @@
         <h2>Poll QR Code</h2>
         <p>Point your phone camera at this code to open the poll:</p>
         <div id="qr-url-display" class="qr-url"></div>
-        <img id="qr-image" alt="QR Code" />
+        <img id="qr-image" alt="QR Code" title="Click to enlarge" />
         <div class="modal-field">
           <label for="base-url-input">Base URL (change if needed):</label>
           <input type="text" id="base-url-input" placeholder="http://192.168.1.x:3000">
@@ -382,6 +382,20 @@
 
     document.getElementById('btn-close-qr').addEventListener('click', () => {
       hide(document.getElementById('qr-modal'));
+    });
+
+    // --- QR fullscreen toggle ---
+    document.getElementById('qr-image').addEventListener('click', () => {
+      const src = document.getElementById('qr-image').src;
+      if (!src) return;
+      const overlay = document.createElement('div');
+      overlay.className = 'qr-fullscreen';
+      const img = document.createElement('img');
+      img.src = src;
+      img.alt = 'QR Code';
+      overlay.appendChild(img);
+      overlay.addEventListener('click', () => overlay.remove());
+      document.body.appendChild(overlay);
     });
 
     // --- Print ---
