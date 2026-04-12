@@ -208,11 +208,13 @@ app.get('/api/voter/status', (req, res) => {
 // --- Heartbeat (presence) ---
 app.post('/api/heartbeat', (req, res) => {
   let voterId = req.cookies.voterId;
+  const cookieOpts = { httpOnly: true, maxAge: 365 * 24 * 60 * 60 * 1000, sameSite: 'lax' };
   if (!voterId) {
     voterId = uuidv4();
-    const cookieOpts = { httpOnly: true, maxAge: 365 * 24 * 60 * 60 * 1000, sameSite: 'lax' };
     res.cookie('voterId', voterId, cookieOpts);
   }
+  // Always keep pollGeneration cookie in sync so vote endpoint reuses this voterId
+  res.cookie('pollGeneration', String(pollState.pollGeneration), cookieOpts);
   const hasVoted = pollState.voters.has(voterId);
   const currentSelections = parseInt(req.body.currentSelections, 10) || 0;
   connectedUsers.set(voterId, {

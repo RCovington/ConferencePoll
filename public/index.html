@@ -375,8 +375,7 @@
         const data = await res.json();
         if (data.pollGeneration && data.pollGeneration !== pollGeneration) {
           // Poll was reset — save current selections so they can be restored
-          const ids = hasVoted ? [...selected] : [];
-          if (ids.length) localStorage.setItem('prevSelections', JSON.stringify(ids));
+          if (selected.size) localStorage.setItem('prevSelections', JSON.stringify([...selected]));
           location.reload();
         }
       } catch {}
