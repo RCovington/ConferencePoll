@@ -142,7 +142,7 @@ app.get('/api/admin/results', requireAdmin, (req, res) => {
     maxVotes: pollState.maxVotes,
     pollGeneration: pollState.pollGeneration,
     connected: { total: connectedCount, voting: votingCount, submitted: submittedCount,
-      avgRemaining: votingCount ? +(totalRemaining / votingCount).toFixed(1) : 0 }
+      totalRemaining }
   });
 });
 
@@ -259,6 +259,13 @@ app.post('/api/vote', rateLimit(60000, 10), (req, res) => {
   }
   pollState.voters.add(voterId);
   pollState.voterSelections[voterId] = talkIds;
+
+  // Update connected-user presence immediately so admin stats reflect the change
+  if (connectedUsers.has(voterId)) {
+    const entry = connectedUsers.get(voterId);
+    entry.hasVoted = true;
+    entry.currentSelections = talkIds.length;
+  }
 
   const cookieOpts = { httpOnly: true, maxAge: 365 * 24 * 60 * 60 * 1000, sameSite: 'lax' };
   res.cookie('voterId', voterId, cookieOpts);

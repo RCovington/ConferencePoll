@@ -66,7 +66,7 @@
       </div>
       <div class="connected-stat">
         <span class="connected-number" id="stat-avg-remaining">0</span>
-        <span class="connected-label">Avg Votes Left</span>
+        <span class="connected-label">Votes Left</span>
       </div>
     </div>
 
@@ -242,7 +242,7 @@
           document.getElementById('stat-connected').textContent = data.connected.total;
           document.getElementById('stat-still-voting').textContent = data.connected.voting;
           document.getElementById('stat-submitted').textContent = data.connected.submitted;
-          document.getElementById('stat-avg-remaining').textContent = data.connected.avgRemaining;
+          document.getElementById('stat-avg-remaining').textContent = data.connected.totalRemaining;
         }
 
         // New voters badge
