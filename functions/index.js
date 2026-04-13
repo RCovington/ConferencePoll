@@ -1,8 +1,17 @@
 const { onRequest } = require('firebase-functions/v2/https');
+const admin = require('firebase-admin');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
+
+admin.initializeApp();
+let _db = null;
+function getDb() {
+  if (!_db) _db = admin.firestore();
+  return _db;
+}
+function getPollDoc() { return getDb().collection('poll').doc('state'); }
 
 const app = express();
 
@@ -72,7 +81,7 @@ const talks = [
   { id: 33, speaker: "Elder Gerrit W. Gong",            title: "Abide With Me; 'Tis Eastertide",                                 session: "Sunday Afternoon",   sessionOrder: 4, order: 8, topic: "Easter & the Resurrection",  summaryUrl: "https://www.thechurchnews.com/general-conference/2026/04/05/elder-gerrit-w-gong-april-2026-general-conference-abide-with-me-tis-eastertide/" },
 ];
 
-// --- In-memory state ---
+// --- In-memory state (loaded from Firestore on cold start) ---
 let adminPassword = process.env.ADMIN_PASSWORD || 'Nanito42';
 
 let pollState = {
@@ -84,6 +93,7 @@ let pollState = {
 };
 
 const adminSessions = new Map();
+let stateLoaded = false;
 
 function initializeVotes() {
   pollState.votes = {};
@@ -91,7 +101,52 @@ function initializeVotes() {
   pollState.voters = new Set();
   pollState.voterSelections = {};
 }
-initializeVotes();
+
+// --- Firestore persistence helpers ---
+async function savePollState() {
+  const data = {
+    maxVotes: pollState.maxVotes,
+    pollGeneration: pollState.pollGeneration,
+    votes: pollState.votes,
+    voters: [...pollState.voters],
+    voterSelections: pollState.voterSelections,
+    adminPassword,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  };
+  await getPollDoc().set(data);
+}
+
+async function loadPollState() {
+  if (stateLoaded) return;
+  try {
+    const snap = await getPollDoc().get();
+    if (snap.exists) {
+      const data = snap.data();
+      pollState.maxVotes = data.maxVotes || 3;
+      pollState.pollGeneration = data.pollGeneration || 1;
+      pollState.votes = data.votes || {};
+      pollState.voters = new Set(data.voters || []);
+      pollState.voterSelections = data.voterSelections || {};
+      if (data.adminPassword) adminPassword = data.adminPassword;
+      // Ensure all talks have a vote entry
+      talks.forEach(t => { if (!(t.id in pollState.votes)) pollState.votes[t.id] = 0; });
+    } else {
+      initializeVotes();
+      await savePollState();
+    }
+  } catch (err) {
+    console.error('Failed to load poll state from Firestore:', err);
+    if (Object.keys(pollState.votes).length === 0) initializeVotes();
+  }
+  stateLoaded = true;
+}
+
+// Middleware to ensure state is loaded before handling requests
+app.use(async (req, res, next) => {
+  await loadPollState();
+  next();
+});
+
 
 // --- Middleware ---
 function requireAdmin(req, res, next) {
@@ -146,22 +201,24 @@ app.get('/api/admin/results', requireAdmin, (req, res) => {
   });
 });
 
-app.post('/api/admin/reset', requireAdmin, (req, res) => {
+app.post('/api/admin/reset', requireAdmin, async (req, res) => {
   const { maxVotes } = req.body;
   if (maxVotes && Number.isInteger(maxVotes) && maxVotes >= 1 && maxVotes <= 32) {
     pollState.maxVotes = maxVotes;
   }
   pollState.pollGeneration++;
   initializeVotes();
+  await savePollState();
   res.json({ success: true, maxVotes: pollState.maxVotes, pollGeneration: pollState.pollGeneration });
 });
 
-app.post('/api/admin/change-password', requireAdmin, (req, res) => {
+app.post('/api/admin/change-password', requireAdmin, async (req, res) => {
   const { newPassword } = req.body;
   if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 4) {
     return res.status(400).json({ error: 'Password must be at least 4 characters.' });
   }
   adminPassword = newPassword;
+  await savePollState();
   res.json({ success: true });
 });
 
@@ -225,7 +282,7 @@ app.post('/api/heartbeat', (req, res) => {
   res.json({ ok: true, pollGeneration: pollState.pollGeneration });
 });
 
-app.post('/api/vote', rateLimit(60000, 10), (req, res) => {
+app.post('/api/vote', rateLimit(60000, 10), async (req, res) => {
   let voterId = req.cookies.voterId;
   const cookieGen = parseInt(req.cookies.pollGeneration, 10);
 
@@ -268,6 +325,8 @@ app.post('/api/vote', rateLimit(60000, 10), (req, res) => {
     entry.hasVoted = true;
     entry.currentSelections = talkIds.length;
   }
+
+  await savePollState();
 
   const cookieOpts = { httpOnly: true, maxAge: 365 * 24 * 60 * 60 * 1000, sameSite: 'lax' };
   res.cookie('voterId', voterId, cookieOpts);
